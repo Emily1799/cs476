@@ -15,6 +15,8 @@ void my_malloc_init(size_t default_size, size_t num_arenas) {
   //initialize global state
   info = (allocator*) malloc(sizeof(allocator));
   info->default_size = default_size;
+  info->num_arenas = num_arenas;
+
   //create arenas and make them a linkedlist, by inserting them each at front.
   arena* prev = NULL;
   for(int i =0; i < num_arenas; i++) {
@@ -55,7 +57,6 @@ arena* generate_single_arena(size_t size) {
 }
 
 //go through the linked list and delete each arena. First, free the memory inside, then the struct itself. Finally, delete info.
-//TODO: set every goddamn lock before starting this, otherwise everything will fuck up.
 void my_malloc_destroy(void) {
   arena* prev = NULL;
   arena* cur = info->arena_top;
@@ -68,62 +69,69 @@ void my_malloc_destroy(void) {
     cur = cur->next;
     free(prev);
   }
+  //also free old memory
+  mem_node* cur2 = info->old_memory;
+  while(cur2 != NULL) {
+    free(cur2->memory);
+    mem_node* prev2 = cur2;
+    cur2 = cur2->next;
+    free(prev2);
+  }
   free(info);
 
 }
 
 //returns an arena that has size bytes available. Returns NULL if there is no such arena
-arena* find_arena_space(size_t size) {
+arena* find_arena_space(int mod) {
   arena* cur = info->arena_top;
-  while(cur != NULL) {
-    if(cur->available >= size) {
-     break;
+  if (info->arena_top == NULL) {
+    return NULL;
+  }
+  if( mod == 0) {
+    return info->arena_top;
+  }
+  for(int i = 0; i < mod; i++) {
+    if (cur != NULL) {
+      cur = cur->next;
     }
     else {
-      cur = cur->next;
+       cur = info->arena_top;
     }
   }
   return cur;
 }
 
 void* my_malloc(size_t size) {
-  arena* loc = find_arena_space(size);
-  void* ret_memory = NULL;
+  pthread_t id = pthread_self();
+  int mod = id % info->num_arenas;
+
+  arena* loc = find_arena_space(mod);
+
+  void* ret_memory;
   //if we found an arena with space, so allocate, and return
-  if(loc != NULL) {
+  if(loc->available >size ) {
     ret_memory = loc->top;
     loc->top += size;
     loc->available -= size;
-    return ret_memory;
   }
-  //if we found no arena with enough space, create a new one
-  if(loc == NULL) {
-    //if we actually need more than the default gives us, generate an arena twice the size
-    if (size > info->default_size) {
-      loc = generate_single_arena(size * 2);
-    }
-    else {
-      loc = generate_single_arena(info->default_size);
-    }
+  else { //save the pointer and replace it.
+    mem_node* new_ptr = malloc(sizeof(mem_node));
+    new_ptr->memory = loc->memory;
 
-    //(2 hours of debugging, and a night of sleep later) we're saving this arena, so allocate it on the heap
-    arena* perm = malloc(sizeof(arena));
-    memcpy(perm, loc, sizeof(arena));
-    //gotta free the old one though (that's another hour of debugging...)
-    free(loc);
+    //put old memory onto linked list
+    new_ptr->next = info->old_memory;
+    info->old_memory = new_ptr;
 
-    loc = perm;
+    //update loc's new information
+    loc->memory = malloc(size * 2);
+    loc->available = size*2;
+    loc->top = loc->memory;
+    loc->size = size*2;
 
-    //add our new arena  to info
-    loc->next = info->arena_top;
-    info->arena_top = loc;
-
-   //actually set aside memory for the user =)
+    //finally, allocate the space to return
     ret_memory = loc->top;
     loc->top += size;
     loc->available -= size;
-    return ret_memory;
-
   }
   return ret_memory;
 }
