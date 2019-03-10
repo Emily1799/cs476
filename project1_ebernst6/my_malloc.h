@@ -2,6 +2,7 @@
 #define __MY_MALLOC_H
 
 #include <stdlib.h>
+#include <pthread.h>
 
 void my_malloc_init(size_t default_size, size_t num_arenas);
 
@@ -19,11 +20,13 @@ typedef struct arena {
    size_t size;
    size_t available;
    void* top;
+   pthread_mutex_t a_lock;
    struct arena* next;
 } arena;
 
 arena* generate_single_arena(size_t);
 arena* find_arena_space(int);
+void print_LL(mem_node*);
 
 typedef struct {
   arena* arena_top;

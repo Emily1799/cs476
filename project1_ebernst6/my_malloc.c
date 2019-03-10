@@ -16,22 +16,22 @@ void my_malloc_init(size_t default_size, size_t num_arenas) {
   info = (allocator*) malloc(sizeof(allocator));
   info->default_size = default_size;
   info->num_arenas = num_arenas;
+  info->old_memory = NULL;
 
   //create arenas and make them a linkedlist, by inserting them each at front.
   arena* prev = NULL;
+  arena* cur;
   for(int i =0; i < num_arenas; i++) {
-    arena* cur = generate_single_arena(default_size);
+    cur = generate_single_arena(default_size);
     if (cur == NULL) {
       //if malloc failed for some reason, try again.Hopefully shouldn't happen?
       i--;
       continue;
     }
-    if(prev != NULL) {
-      prev->next = cur;
-    }
+    cur->next = prev;
     prev = cur;
   }
-  info->arena_top = prev;
+  info->arena_top = cur;
 }
 
 
@@ -53,35 +53,48 @@ arena* generate_single_arena(size_t size) {
   cur->available = size;
   cur->top = cur->memory;
   cur->next = NULL;
+  pthread_mutex_init(&cur->a_lock, NULL);
+
   return cur;
 }
 
+void print_LL(mem_node* head) {
+  printf("%x%s",head, "->");
+  while (head != NULL) {
+   printf("%x->", head->next);
+   head = head->next;
+  }
+  printf("\n");
+  return;
+}
 //go through the linked list and delete each arena. First, free the memory inside, then the struct itself. Finally, delete info.
 void my_malloc_destroy(void) {
   arena* prev = NULL;
   arena* cur = info->arena_top;
-
+  mem_node* prev2 = NULL;
+  mem_node* cur2 = info->old_memory;
   while(cur != NULL) {
-    if(cur->memory != NULL){
+   if(cur->memory != NULL){
     	free(cur->memory);
     }
+    pthread_mutex_destroy(&(cur->a_lock));
     prev = cur;
     cur = cur->next;
     free(prev);
   }
-  //also free old memory
-  mem_node* cur2 = info->old_memory;
+//  print_LL(info->old_memory);
+  //also free old memor
   while(cur2 != NULL) {
-    free(cur2->memory);
-    mem_node* prev2 = cur2;
+    if (cur2->memory != NULL) {
+    	free(cur2->memory);
+    }
+    prev2 = cur2;
     cur2 = cur2->next;
     free(prev2);
   }
   free(info);
-
 }
 
-//returns an arena that has size bytes available. Returns NULL if there is no such arena
 arena* find_arena_space(int mod) {
   arena* cur = info->arena_top;
   if (info->arena_top == NULL) {
@@ -98,14 +111,19 @@ arena* find_arena_space(int mod) {
        cur = info->arena_top;
     }
   }
+//  printf("%s%d\n", "Locked on ", mod);
   return cur;
 }
+
 
 void* my_malloc(size_t size) {
   pthread_t id = pthread_self();
   int mod = id % info->num_arenas;
-
+//  print_LL(info->arena_top);
   arena* loc = find_arena_space(mod);
+  pthread_mutex_lock(&(loc->a_lock));
+
+  //lock this arena so that only we can mess with it
 
   void* ret_memory;
   //if we found an arena with space, so allocate, and return
@@ -133,6 +151,7 @@ void* my_malloc(size_t size) {
     loc->top += size;
     loc->available -= size;
   }
+  pthread_mutex_unlock(&(loc->a_lock));
   return ret_memory;
 }
 
