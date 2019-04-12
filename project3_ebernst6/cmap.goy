@@ -1,0 +1,39 @@
+package main
+
+type ChannelMap struct {
+     words map[string]int
+     ask_buf chan string
+     add_buf chan string
+     reduce_buf chan string
+}
+
+func (c *ChannelMap) Listen() {
+
+}
+
+func (c *ChannelMap) Stop() {
+}
+
+func (c *ChannelMap) Reduce(functor ReduceFunc, accum_str string, accum_int int) (string, int) {
+	_ = functor
+	_ = accum_str
+	_ = accum_int
+	return "", 0
+}
+
+func (c *ChannelMap) AddWord(word string) {
+    c.add_buf <- word
+	_ = word
+}
+
+func (c *ChannelMap) GetCount(word string) int {
+	_ = word
+	return 0
+}
+
+func NewChannelMap() *ChannelMap {
+     
+	return &ChannelMap{ask_buf :  make(chan string, ASK_BUFFER_SIZE),
+        add_buf : make(chan string, ADD_BUFFER_SIZE), 
+        reduce_buf : make(chan string, REDUCE_BUFFER_SIZE)  }
+}
