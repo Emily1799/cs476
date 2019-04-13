@@ -1,0 +1,13 @@
+1 reader 1 asker:     21.227s
+16 readers 2 askers:  35.384s
+4 readers 8 askers:   35.390s
+16 readers 32 askers: 37.571s
+64 readers 64 askers: 10m48.330s
+
+
+mine:
+1 reader 64 askers:   23.781s
+64 readers 1 asker:   0m35.440s
+128 readers 1 asker:  0m35.440s
+1 reader 128 askers:  annoyingly long  
+Having a high number of readers and and a high number of askers greatly increases the amount of time for execution
